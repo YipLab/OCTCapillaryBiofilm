@@ -1,0 +1,94 @@
+import numpy as np
+from LocalMinMax import posMinArr,posMaxArr
+from Smooth import smooth
+
+ExtSrch=500
+def MinMaxProj(ZProjLog2):
+    ZPLog2Mn=ZProjLog2.mean(axis=1)
+    Mx=ZPLog2Mn.max()
+    Md=np.median(ZPLog2Mn)
+    RPos=np.arange(len(ZPLog2Mn))
+    RPosNaN=RPos+np.nan
+    ValidRPos=np.where(ZPLog2Mn>((Mx+Md)/2),RPos,RPosNaN)
+    ValidRPos=ValidRPos[~np.isnan(ValidRPos)].astype(int)
+    MinMax=ValidRPos.min()-len(ValidRPos)/2
+    MaxMax=min(ValidRPos.max()+len(ValidRPos)/2,len(ZPLog2Mn))
+    return MinMax,MaxMax
+    
+def Centress(ZProjLog2):
+
+    ##MaxHough=20
+    ##HistS=100
+    ##Padd=100
+    ##ZPLog2Mn=ZProjLog2.mean(axis=1)
+    ##Mx=ZPLog2Mn.max()
+    ##Md=np.median(ZPLog2Mn)
+    ##RPos=np.arange(len(ZPLog2Mn))
+    ##RPosNaN=RPos+np.nan
+    ##ValidRPos=np.where(ZPLog2Mn>((Mx+Md)/2),RPos,RPosNaN)
+    ##ValidRPos=ValidRPos[~np.isnan(ValidRPos)].astype(int)
+    ##MinMax=ValidRPos.min()-len(ZPLog2Mn)/20
+    ##MaxMax=min(ValidRPos.max()+len(ZPLog2Mn)/20,len(ZPLog2Mn))
+    ##pp.plot(RPos[MinMax:MaxMax],ZPLog2Mn[MinMax:MaxMax],'xb')
+
+    MinMax,MaxMax=MinMaxProj(ZProjLog2)
+    Segmnt=ZProjLog2[MinMax:MaxMax,:]
+    SegmntMx=Segmnt.argmax(axis=0)
+    SegmntSM=smooth(Segmnt.argmax(axis=0),window_len=11)#Segmnt.argmax(axis=0)
+    MaxPadd=SegmntSM[0:2*ExtSrch]
+    MinPadd=SegmntSM[len(SegmntSM)-2*ExtSrch:len(SegmntSM)]
+    SegmntSMPadd=np.zeros(len(SegmntSM)+4*ExtSrch)
+    PosMaxCtr=SegmntSM.argmax()+2*ExtSrch
+    PosMinCtr=SegmntSM.argmin()+2*ExtSrch
+    SegmntSMPadd[0:2*ExtSrch]=MinPadd
+    SegmntSMPadd[2*ExtSrch:len(SegmntSM)+2*ExtSrch]=SegmntSM
+    SegmntSMPadd[len(SegmntSM)+2*ExtSrch:len(SegmntSMPadd)]=MaxPadd
+    #pp.plot(SegmntSMPadd)
+    MinPos=posMinArr(SegmntSMPadd,750)
+    MinCut=np.where(np.diff(MinPos)!=1)[0][0]
+    MinPos1=MinPos[0:MinCut+1].mean()
+    MinPos2=MinPos[MinCut+1:len(MinPos)].mean()
+    if MinPos1>(len(SegmntSMPadd)-MinPos2):
+        MinPos=MinPos1
+    else:
+        MinPos=MinPos2
+    
+    MinPosReal=MinPos-2*ExtSrch
+
+    MaxPos=posMaxArr(SegmntSMPadd,750)
+    MaxCut=np.where(np.diff(MaxPos)!=1)[0][0]
+    MaxPos1=MaxPos[0:MaxCut+1].mean()
+    MaxPos2=MaxPos[MaxCut+1:len(MaxPos)].mean()
+    if MaxPos1>(len(SegmntSMPadd)-MaxPos2):
+        MaxPos=MaxPos1
+    else:
+        MaxPos=MaxPos2
+
+    MaxPosReal=MaxPos-2*ExtSrch
+    MaxAng=MaxPosReal*2*np.pi/len(SegmntSM)
+    MinAng=MinPosReal*2*np.pi/len(SegmntSM)
+    AvgAng=(MaxAng-np.pi+MinAng)/2##180=np.pi convert both angles to the same reference
+    RadShift=(SegmntMx[MaxPosReal]-SegmntMx[MinPosReal])/2
+    #SegmntMx[MinPosReal]
+    #SegmntMx[MaxPosReal]
+    #pp.plot(MaxPos,SegmntSMPadd[MaxPos],'+b')
+    if AvgAng<(np.pi/2):
+        Rh=RadShift*np.cos(AvgAng)
+        Rv=RadShift*np.sin(AvgAng)
+    elif AvgAng<np.pi:
+        Rh=-RadShift*np.cos(np.pi-AvgAng)
+        Rv=RadShift*np.sin(np.pi-AvgAng)
+    elif AvgAng<(3*np.pi/4):
+        Rh=-RadShift*np.cos(0.75*np.pi-AvgAng)
+        Rv=-RadShift*np.sin(0.75*np.pi-AvgAng)
+    else:
+        Rh=RadShift*np.cos(2*np.piAvgAng)
+        Rv=-RadShift*np.sin(2*np.piAvgAng)
+    Rh=int(np.round(Rh))
+    Rv=int(np.round(Rv))
+    return Rh,Rv,SegmntSMPadd
+    #ZP1=np.roll(ZProj,Rv,axis=0)
+    #ZP2=np.roll(ZP1,Rh,axis=1)
+    #ZP2Log=LogPolarTransform.logpolar_fancy(ZP2,ZP2.shape[0]/2,ZP2.shape[1]/2)
+    #return ZP2Log
+

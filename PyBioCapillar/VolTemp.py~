@@ -1,0 +1,136 @@
+#import EllipseFitter as ef
+import dicom
+import glob as gb 
+import numpy as np
+import scipy.signal as ss 
+#from skimage import filters, measure, segmentation
+#from scipy.ndimage import find_objects
+import os
+import matplotlib.pyplot as pp
+#from skimage.transform import hough_ellipse
+#import skimage.morphology as morph 
+#import skimage.measure as meas
+#import scipy
+from LocalMinMax import posMinArr,posMaxArr
+import LogPolarTransform
+from Smooth import smooth
+from Centerization import Centress,MinMaxProj,Centering
+import sys
+import tifffile
+os.chdir(sys.argv[1])
+FoldShiftFile=sys.argv[2]
+ShiftFile='Shifts'
+OutputPrefix = 'Straight'
+FolderOut="Processed"
+#from LogPolarTransform import logpolar_fancy
+ 
+###FROM: http://www.lfd.uci.edu/~gohlke/code/imreg.py.html
+##from __future__ import division, print_function
+
+
+##import numpy
+##from numpy.fft import fft2, ifft2, fftshi
+#from skimage.draw import ellipse_perimeter
+#from skimage.filters import roberts, sobel, scharr, prewitt
+#from scipy.ndimage.filters import gaussian_filter
+#import javabridge as jv
+#import bioformats as bf
+#jv.start_vm(class_path=bf.JARS)
+
+##https://pyscience.wordpress.com/2014/09/08/dicom-in-python-importing-medical-image-data-into-numpy-with-pydicom-and-vtk/
+##http://scikit-image.org/docs/dev/auto_examples/plot_circular_elliptical_hough_transform.html
+##http://docs.opencv.org/master/dd/d49/tutorial_py_contour_features.html#gsc.tab=0
+CheckAnalysis = FolderOut+'/'+OutputPrefix+'*'
+##print(CheckAnalysis)
+DataProc=gb.glob(CheckAnalysis)
+##DataProc
+if os.path.exists(FolderOut)==0:
+    os.mkdir(FolderOut)
+#print(os.path.exists(FolderOut))
+#print(DataProc)
+if len(DataProc)==0:
+    FileOnFold=sorted(gb.glob('IM*'), key=os.path.getmtime)##gb.glob('IM*',)
+    #import matplotlib.pyplot as pp
+    #import cv2
+    AvgWin=5
+    ExtSrch=500
+    MaxHough=20
+    HistS=100
+    Padd=100
+    FileNum=len(FileOnFold)
+    RefDs = dicom.read_file(FileOnFold[0])
+    Img=RefDs.pixel_array
+    Stack = np.zeros([Img.shape[0],Img.shape[1],FileNum])
+    Count=0
+    ii32 = np.iinfo(np.int32)
+    for kat in FileOnFold:
+        RefDs = dicom.read_file(kat)##rdr = bf.ImageReader(kat, perform_init=True)
+        Stack[:,:,Count]=RefDs.pixel_array
+        Count+=1
+        #ConstPixelDims = (int(RefDs.Rows), int(RefDs.Columns))
+        # Load spacing values (in mm)
+        #ConstPixelSpacing = (float(RefDs.PixelSpacing[0]), float(RefDs.PixelSpacing[1]), float(RefDs.SliceThickness))
+
+    ZProj=Stack.mean(axis=2)
+
+    ShiftFile_path=FoldShiftFile+'/'+ShiftFile
+    if os.path.exists(ShiftFile_path):
+        f = open(ShiftFile_path, 'r')
+        FN_lst = f.readline()
+        FN_lst = FN_lst.split(";")
+        Rh=int(FN_lst[0])
+        Rv=int(FN_lst[1])
+        f.close()
+    else:
+        Rh,Rv=Centering(ZProj)
+        f = open(ShiftFile_path, 'w')
+        CfgData=str(Rh)+";"+str(Rv)
+        f.write(CfgData)
+        f.close()
+
+    
+
+    StackLogPol=np.zeros(Stack.shape)
+    for kat in np.arange(Stack.shape[2]):
+        Slice=Stack[:,:,kat]
+        ZP1=np.roll(Slice,Rv,axis=0)
+        ZP2=np.roll(ZP1,Rh,axis=1)
+        ZP2Log=LogPolarTransform.logpolar_fancy(ZP2,ZP2.shape[0]/2,ZP2.shape[1]/2)
+        StackLogPol[0:ZP2Log.shape[0]-ZP2Log.shape[0]*3/4,:,kat]=ZP2Log[ZP2Log.shape[0]*3/4:ZP2Log.shape[0],:]
+    
+    
+    STLP=StackLogPol.mean(axis=1)
+    STLP1=STLP.max(axis=1)
+    STLP1Pos=np.where(STLP1>STLP1.mean())
+    MaxPos=STLP1Pos[0].max()
+    MaxPos=MaxPos+MaxPos*0.25
+    DataSave=StackLogPol[0:MaxPos,:,:]
+    
+    DataSaveNorm=np.zeros(DataSave.shape)
+    for kat in np.arange(DataSave.shape[2]):
+        Dmin=DataSave[:,:,kat].min()
+        Dmax=DataSave[:,:,kat].max()
+        DataSaveNorm[:,:,kat]=(DataSave[:,:,kat]-DataSave[:,:,kat].min())/(Dmax-Dmin)*ii32.max
+
+    #DataSave=DataSave
+    DataSaveConv=np.zeros([DataSave.shape[1]-AvgWin+1,DataSave.shape[0],DataSave.shape[2]])
+    ##([DataSave.shape[1]-AvgWin+1,DataSave.shape[0],DataSave.shape[2]])##(DataSaveNorm.shape)
+    convKernel=np.ones(AvgWin)/AvgWin
+    for kat0 in np.arange(DataSave.shape[0]):
+        for kat2 in np.arange(DataSave.shape[2]):
+            DataSaveConv[:,kat0,kat2]=ss.fftconvolve(DataSave[kat0,:,kat2],convKernel, mode='valid')
+
+    DataSave=np.transpose(DataSave,(1,2,0))
+    FileOut=FolderOut+"/"+FileOnFold[0][0:2]
+    OutPutSingleFile=FileOut +  '.tif'
+    tifffile.imsave(OutPutSingleFile,DataSave.astype(np.int32))
+    
+    DataSaveNorm=np.transpose(DataSaveNorm,(1,2,0))
+    FileOut=FolderOut+"/"+OutputPrefix+'Norm_'+FileOnFold[0][0:2]
+    OutPutSingleFile=FileOut +  '.tif'
+    tifffile.imsave(OutPutSingleFile,DataSaveNorm.astype(np.int32))
+    
+    DataSaveConv=np.transpose(DataSaveConv,(0,2,1))
+    FileOut=FolderOut+"/"+OutputPrefix+'Conv_'+FileOnFold[0][0:2]
+    OutPutSingleFile=FileOut +  '.tif'
+    tifffile.imsave(OutPutSingleFile,DataSaveConv.astype(np.int32))

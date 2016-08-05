@@ -1,0 +1,72 @@
+import fnmatch
+import os
+import sys
+import numpy as np
+import tifffile 
+import glob as gb 
+import operator
+
+
+ManualPoints=False#True
+JumpAng=50
+TimePoints=[]
+if ManualPoints:
+    v2=np.arange(770,1020,5)
+    v1=np.arange(0,21,5)
+    TimePoints=np.concatenate((v1,v2))
+
+#os.chdir(sys.argv[1])
+FoldTempFile=sys.argv[1]
+TempFileprefix='TempSlice'
+matches = []
+foldNum = []
+for root, dirnames, filenames in os.walk(sys.argv[1]):##to be changed to sys.argv[1]
+    for filename in fnmatch.filter(filenames, 'StraightConv_IM.tif'):
+        pet=os.path.join(root, filename).split('/')
+        matches.append(os.path.join(root, filename))
+        val0=next(i for i in pet if i.startswith('export'))
+        val1=next(i for i in pet if i.endswith('_OCT'))
+        val1=int(val1.split('_OCT')[0])
+        foldNum.append([val0,val1])#int(TMP[len(TMP)-1]))
+        
+list1=sorted(foldNum, key=operator.itemgetter(0, 1))
+matchesSort=[]
+#Item=0
+for katL in list1:
+    Item=0#for katM in matches:
+    while (~np.isnan(Item)):
+        katM=matches[Item]
+        if (katL[0] in katM and '/'+str(katL[1])+'_OCT/' in katM):
+            matchesSort.append(katM)
+            katL
+            katM
+            Item
+            Item=np.nan
+        Item+=1
+
+#SortPos = np.argsort(foldNum)
+TimeP = len(matchesSort)
+Img = tifffile.imread(matchesSort[0])
+NumSlice = Img.shape[0]
+arr1 = Img.shape[1]
+arr2 = Img.shape[2]
+DataOut= np.zeros([TimeP,Img.shape[1],Img.shape[2]])
+if  ManualPoints:
+    AngSeries=TimePoints
+else:
+    AngSeries=np.arange(0,NumSlice,JumpAng)
+for kat in AngSeries:
+    OutPutSingleFile=FoldTempFile+'/'+TempFileprefix+str(kat)+'.tif'
+    DataProc=gb.glob(OutPutSingleFile)
+    if len(DataProc)==0:
+        for katF in np.arange(TimeP): ## not the names themself 
+            Img = tifffile.imread(matchesSort[katF],key = kat)
+            arr11 = Img.shape[0]
+            arr22 = Img.shape[1]
+            ar1=min(arr1,arr11)
+            ar2=min(arr2,arr22)
+            DataOut[katF,0:ar1,0:ar2] = Img[0:ar1,0:ar2]
+        OutPutSingleFile=FoldTempFile+'/'+TempFileprefix+str(kat)+'.tif'
+        print(OutPutSingleFile)
+        tifffile.imsave(OutPutSingleFile,DataOut.astype(np.int32))
+

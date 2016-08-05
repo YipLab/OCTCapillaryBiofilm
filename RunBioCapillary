@@ -1,0 +1,23 @@
+DataFolder=${PWD}
+for i in $(find -name "*_OCT" | sort -n)
+do
+	var1=$(echo $i | cut -f2 -d.)
+	DataFolderRun=$DataFolder$var1
+	echo $DataFolderRun
+	cd ~/image_store/Scripts/PyBioCapillar/
+	NameScript="Process"
+	NameScriptPy=$NameScript".py"
+	#NameScriptCfg=$NameScript"Config.py"
+	NoHupFile=$DataFolder"/"$NameScript".NoHup"
+	rm -f $NoHupFile
+	#python  $NameScriptCfg $DataFolder
+	###python -i $NameScriptPy $DataFolderRun $DataFolder
+	python $NameScriptPy $DataFolderRun $DataFolder
+	
+	#DataFolder=${PWD}
+	#cd ~/image_store/Scripts/PythonSrc/
+	#python NNSingleChannelConfig.py $DataFolder
+	#nohup python NNSingleChannel.py $DataFolder&
+	#python -i NNSingleChannel.py $DataFolder
+done
+

@@ -1,0 +1,58 @@
+import dicom
+import glob as gb 
+import numpy as np
+import os
+import sys
+import tifffile
+os.chdir(sys.argv[1])
+FoldShiftFile=sys.argv[2]
+FolderOut="HyperStack"
+CheckAnalysis = FolderOut+'/'+OutputPrefix+'*'
+DataProc=gb.glob(CheckAnalysis)
+if os.path.exists(FolderOut)==0:
+    os.mkdir(FolderOut)
+if len(DataProc)==0:
+    FileOnFold=sorted(gb.glob('IM*'), key=os.path.getmtime)##gb.glob('IM*',)
+    FileNum=len(FileOnFold)
+    RefDs = dicom.read_file(FileOnFold[0])
+    Img=RefDs.pixel_array
+    Stack = np.zeros([Img.shape[0],Img.shape[1],FileNum])
+    Count=0
+    ii32 = np.iinfo(np.int32)
+    for kat in FileOnFold:
+        RefDs = dicom.read_file(kat)##rdr = bf.ImageReader(kat, perform_init=True)
+        Stack[:,:,Count]=RefDs.pixel_array
+        Count+=1
+    
+
+
+
+
+    DataSaveNorm=np.zeros(DataSave.shape)
+    for kat in np.arange(DataSave.shape[2]):
+        Dmin=DataSave[:,:,kat].min()
+        Dmax=DataSave[:,:,kat].max()
+        DataSaveNorm[:,:,kat]=(DataSave[:,:,kat]-DataSave[:,:,kat].min())/(Dmax-Dmin)*ii32.max
+
+    #DataSave=DataSave
+    DataSaveConv=np.zeros([DataSave.shape[1]-AvgWin+1,DataSave.shape[0],DataSave.shape[2]])
+    ##([DataSave.shape[1]-AvgWin+1,DataSave.shape[0],DataSave.shape[2]])##(DataSaveNorm.shape)
+    convKernel=np.ones(AvgWin)/AvgWin
+    for kat0 in np.arange(DataSave.shape[0]):
+        for kat2 in np.arange(DataSave.shape[2]):
+            DataSaveConv[:,kat0,kat2]=ss.fftconvolve(DataSave[kat0,:,kat2],convKernel, mode='valid')
+
+    DataSave=np.transpose(DataSave,(1,2,0))
+    FileOut=FolderOut+"/"+FileOnFold[0][0:2]
+    OutPutSingleFile=FileOut +  '.tif'
+    tifffile.imsave(OutPutSingleFile,DataSave.astype(np.int32))
+    
+    DataSaveNorm=np.transpose(DataSaveNorm,(1,2,0))
+    FileOut=FolderOut+"/"+OutputPrefix+'Norm_'+FileOnFold[0][0:2]
+    OutPutSingleFile=FileOut +  '.tif'
+    tifffile.imsave(OutPutSingleFile,DataSaveNorm.astype(np.int32))
+    
+    DataSaveConv=np.transpose(DataSaveConv,(0,2,1))
+    FileOut=FolderOut+"/"+OutputPrefix+'Conv_'+FileOnFold[0][0:2]
+    OutPutSingleFile=FileOut +  '.tif'
+    tifffile.imsave(OutPutSingleFile,DataSaveConv.astype(np.int32))
